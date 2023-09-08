@@ -17,16 +17,15 @@ typedef unsigned int uint_t;
 uint8_t invisible = 0b1000000;
 char *name = NULL;
 char headerfmt[] = "uint8_t %s[%i * %i] = {";
-char datafmt[] = "0x%x,";
+char datafmt[] = "%i,";
 char footer[] = "};";
 
 uint8_t
 rgb2sio (uint32_t rgb)
 {
-    uint8_t s = 0b11 * (rgb & 0xff) / 0xff;
-    s |= (0b11 * ((rgb >> 8) & 0xff) / 0xff) << 2;
-    s |= (0b11 * ((rgb >> 16) & 0xff) / 0xff) << 4;
-    return s;
+    return 0b11 * (rgb & 0xff) / 0xff
+           | (0b11 * ((rgb >> 8) & 0xff) / 0xff) << 2
+           | (0b11 * ((rgb >> 16) & 0xff) / 0xff) << 4;
 }
 
 void
@@ -47,7 +46,8 @@ tga2sio (FILE *f)
         uint8_t bits_per_pixel;
         uint8_t img_desc;
     } tga;
-    int i;
+    int i, j;
+    uint8_t *data;
 
     fread (&tga.id_len, 1, 1, f);
     fread (&tga.cm_type, 1, 1, f);
@@ -83,45 +83,44 @@ tga2sio (FILE *f)
 
     printf (headerfmt, name, tga.width, tga.height);
 
+    data = malloc (tga.width * tga.height);
+
     switch (tga.img_type)
         {
         case 1:
             {
-                /* NOTE: assumed 24 bits_per_entry and 8 bits_per_pixel */
                 uint32_t *cm = malloc (tga.cm_len * 4);
-                uint8_t *data = malloc (tga.width * tga.height);
-                int c;
                 for (i = 0; i < tga.cm_len; ++i)
-                    fread (&cm[i], 3, 1, f);
+                    fread (&cm[i], tga.cm_bits_per_entry / 8, 1, f);
                 for (i = 0; i < tga.width * tga.height; ++i)
-                    data[i] = (c = fgetc (f)) ? rgb2sio (cm[c]) : invisible;
+                    data[i] = (j = fgetc (f)) ? rgb2sio (cm[j]) : invisible;
                 free (cm);
-                /* TODO: check img_desc for pixel direction */
-                for (i = tga.width - 1; i >= 0; --i)
-                    for (c = 0; c < tga.height; ++c)
-                        printf (datafmt, data[c + i * tga.height]);
-                free (data);
             }
             break;
 
         case 2:
-            /* NOTE: assumed 24 bits_per_pixel (rgb) */
-            {
-                uint32_t c = 0;
-                for (i = 0; i < tga.width * tga.height; ++i)
-                    {
-                        fread (&c, tga.bits_per_pixel / 8, 1, f);
-                        printf (datafmt, rgb2sio (c));
-                    }
-            }
+            for (i = 0; i < tga.width * tga.height; ++i)
+                {
+                    fread (&j, tga.bits_per_pixel / 8, 1, f);
+                    data[i] = rgb2sio (j);
+                }
             break;
 
         case 3:
             /* NOTE: assumed 8 bits_per_pixel */
             for (i = 0; i < tga.width * tga.height; ++i)
-                printf (datafmt, rgb2sio (fgetc (f)));
+                data[i] = rgb2sio (fgetc (f));
             break;
         }
+
+    /* TODO: check img_desc for pixel direction */
+    for (i = tga.height - 1; i >= 0; --i)
+        for (j = 0; j < tga.width; ++j)
+            printf (datafmt, data[j + i * tga.width]);
+
+    if (data != NULL)
+        free (data);
+
     puts (footer);
 }
 
