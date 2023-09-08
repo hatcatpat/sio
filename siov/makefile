@@ -7,4 +7,4 @@ run: all
 	./siov
 
 clean:
-	rm siov
+	if [ -f siov ]; then rm siov; fi

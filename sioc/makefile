@@ -7,4 +7,4 @@ run: all
 	./sioc
 
 clean:
-	rm sioc
+	if [ -f sioc ]; then rm sioc; fi

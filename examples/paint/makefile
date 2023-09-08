@@ -7,4 +7,4 @@ run: all
 	./paint
 
 clean:
-	rm paint
+	if [ -f paint ]; then rm paint; fi

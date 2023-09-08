@@ -3,7 +3,8 @@
 #include "../../sio.h"
 #include "sprites.h"
 
-#define NUM (1 << 10)
+/* #define NUM (1 << 10) */
+#define NUM (1 << 4)
 
 int
 main (int argc, char *argv[])
@@ -15,6 +16,10 @@ main (int argc, char *argv[])
 
     if (sio_init (360, 250))
         return -1;
+
+    emu_stretch (s.screen.width * 2, s.screen.height * 2);
+
+    s.bg = 0b010101;
 
     for (i = 0; i < NUM; ++i)
         {
@@ -48,6 +53,9 @@ main (int argc, char *argv[])
                     sio_bliti (pig, pos[i][0], pos[i][1], 5, 5);
                 }
             s.recolor = SIO_WHITE;
+
+            sio_blit (pig, s.screen.width / 2 - 20, s.screen.height / 2 - 20,
+                      5, 5, 40, 40);
 
             sio_loop ();
         }

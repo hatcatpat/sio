@@ -1,4 +1,4 @@
-/* #define SIO_DEV */
+#define SIO_DEV
 #ifdef SIO_DEV
 #define SIO_IMPL
 #define SIO_SDL
@@ -50,7 +50,6 @@ typedef struct
 
 typedef struct
 {
-    int zoom;
     bool go;
     sio_canvas_t screen, *canvas;
     uint8_t bg, recolor;
@@ -88,6 +87,7 @@ void sio_circlef (int x, int y, int r, uint8_t c);
 int emu_init ();
 void emu_deinit ();
 void emu_loop ();
+void emu_stretch (int width, int height);
 
 #ifdef SIO_IMPL
 #include <stdio.h>
@@ -102,7 +102,6 @@ sio_init (int width, int height)
     memset (&s, 0, sizeof (sio_t));
     sio_canvas_init (&s.screen, width, height);
     s.canvas = &s.screen;
-    s.zoom = 2;
     s.go = true;
     s.recolor = 0b1111111;
     return emu_init ();
@@ -353,6 +352,7 @@ SDL_Window *window;
 SDL_Renderer *render;
 SDL_Texture *screen;
 uint8_t *pixels;
+float perf_freq;
 
 int
 emu_init ()
@@ -363,9 +363,9 @@ emu_init ()
             return -1;
         }
 
-    window = SDL_CreateWindow (
-        "sio", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-        s.canvas->width * s.zoom, s.canvas->height * s.zoom, 0);
+    window = SDL_CreateWindow ("sio", SDL_WINDOWPOS_CENTERED,
+                               SDL_WINDOWPOS_CENTERED, s.canvas->width,
+                               s.canvas->height, 0);
     if (window == NULL)
         {
             PRINT_SDL_ERROR (SDL_CreateWindow);
@@ -373,14 +373,13 @@ emu_init ()
         }
     SDL_ShowCursor (0);
 
-    render = SDL_CreateRenderer (window, -1, SDL_RENDERER_PRESENTVSYNC);
+    render = SDL_CreateRenderer (window, -1, 0);
     if (render == NULL)
         {
             PRINT_SDL_ERROR (SDL_CreateRenderer);
             return -1;
         }
     SDL_RenderSetLogicalSize (render, s.canvas->width, s.canvas->height);
-    SDL_RenderSetIntegerScale (render, 1);
     SDL_SetRenderDrawColor (render, 0, 0, 0, 0xff);
     SDL_RenderClear (render);
     SDL_RenderPresent (render);
@@ -395,6 +394,7 @@ emu_init ()
         }
 
     pixels = malloc (s.canvas->width * s.canvas->height);
+    perf_freq = SDL_GetPerformanceFrequency ();
 
     return 0;
 }
@@ -429,6 +429,8 @@ emu_loop ()
 {
     static SDL_Event e;
     static uint8_t c;
+    static uint_t end, oldend = 0;
+    static float elapsed, delay = 16.666f;
 
     while (SDL_PollEvent (&e))
         {
@@ -477,7 +479,26 @@ emu_loop ()
     SDL_RenderClear (render);
     SDL_RenderCopy (render, screen, NULL, NULL);
     SDL_RenderPresent (render);
-    SDL_Delay (16);
+
+    if (oldend == 0)
+        {
+            end = SDL_GetPerformanceCounter ();
+            oldend = end;
+        }
+    else
+        {
+            oldend = end;
+            end = SDL_GetPerformanceCounter ();
+            elapsed = (end - oldend) / perf_freq * 1000.f - delay;
+            delay = MAX (0, 16.666f - elapsed);
+        }
+    SDL_Delay (delay);
+}
+
+void
+emu_stretch (int width, int height)
+{
+    SDL_SetWindowSize (window, width, height);
 }
 #endif
 
@@ -495,6 +516,11 @@ emu_deinit ()
 
 void
 emu_loop ()
+{
+}
+
+void
+emu_stretch (int width, int height)
 {
 }
 #endif
