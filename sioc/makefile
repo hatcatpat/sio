@@ -1,7 +1,7 @@
 all: sioc
 
 sioc: *.c
-	gcc -o sioc *.c -Wall -ansi
+	gcc -o sioc sioc.c -O3 -Wall -ansi
 
 run: all
 	./sioc

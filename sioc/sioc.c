@@ -16,7 +16,7 @@ typedef unsigned int uint_t;
 
 uint8_t invisible = 0b1000000;
 char *name = NULL;
-char headerfmt[] = "uint8_t %s[%i * %i] = {";
+char headerfmt[] = "unsigned char %s[%i * %i] = {";
 char datafmt[] = "%i,";
 char footer[] = "};";
 
