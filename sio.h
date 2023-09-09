@@ -1,4 +1,7 @@
+/* TODO: secure sio_blit(i) against negatives, use same logic as sio_rect */
+
 #define SIO_DEV
+
 #ifdef SIO_DEV
 #define SIO_IMPL
 #define SIO_SDL
@@ -44,7 +47,7 @@ typedef uint8_t bool;
 
 typedef struct
 {
-    int width, height;
+    uint32_t width, height;
     uint8_t *data;
 } sio_canvas_t;
 
@@ -52,7 +55,7 @@ typedef struct
 {
     bool go;
     sio_canvas_t screen, *canvas;
-    uint8_t bg, recolor;
+    uint8_t recolor;
     int mouse[2];
     bool key[0xff], button[3], oldkey[0xff], oldbutton[3];
     void (*mousemove) (int x, int y);
@@ -69,10 +72,13 @@ void sio_deinit ();
 void sio_loop ();
 bool sio_pressed (uint8_t key);
 bool sio_buttoned (uint8_t button);
-void sio_canvas_init (sio_canvas_t *canvas, int width, int height);
+void sio_canvas_init (sio_canvas_t *canvas, uint32_t width, uint32_t height);
 void sio_canvas_deinit (sio_canvas_t *canvas);
+int sio_canvas_save (sio_canvas_t *canvas, char *name);
+int sio_canvas_load (sio_canvas_t *canvas, char *name);
+void sio_target (sio_canvas_t *canvas_or_null);
 uint8_t sio_rgb (uint8_t r, uint8_t g, uint8_t b);
-void sio_clear ();
+void sio_clear (uint8_t c);
 void sio_pixel (int x, int y, uint8_t c);
 void sio_bliti (uint8_t *data, int x, int y, int w, int h);
 void sio_blit (uint8_t *data, int x, int y, int w, int h, int sw, int sh);
@@ -112,6 +118,54 @@ sio_deinit ()
 {
     sio_canvas_deinit (&s.screen);
     emu_deinit ();
+}
+
+int
+sio_canvas_save (sio_canvas_t *canvas, char *name)
+{
+    if (canvas->data == NULL)
+        {
+            fprintf (stderr, "[error] unable to save canvas, data is NULL\n");
+            return -1;
+        }
+    else
+        {
+            FILE *f = fopen (name, "wb");
+            if (f == NULL)
+                {
+                    fprintf (stderr, "[error] unable to open %s for writing\n",
+                             name);
+                    return -1;
+                }
+            fwrite (&canvas->width, 4, 1, f);
+            fwrite (&canvas->height, 4, 1, f);
+            fwrite (canvas->data, 1, canvas->width * canvas->height, f);
+            fclose (f);
+            return 0;
+        }
+}
+
+int
+sio_canvas_load (sio_canvas_t *canvas, char *name)
+{
+    FILE *f = fopen (name, "rb");
+    if (f == NULL)
+        {
+            fprintf (stderr, "[error] unable to open %s for reading\n", name);
+            return -1;
+        }
+    fread (&canvas->width, 4, 1, f);
+    fread (&canvas->height, 4, 1, f);
+    canvas->data = realloc (canvas->data, canvas->width * canvas->height);
+    fread (canvas->data, 1, canvas->width * canvas->height, f);
+    fclose (f);
+    return 0;
+}
+
+void
+sio_target (sio_canvas_t *canvas_or_null)
+{
+    s.canvas = (canvas_or_null == NULL ? &s.screen : canvas_or_null);
 }
 
 void
@@ -156,10 +210,11 @@ sio_buttoned (uint8_t button)
 }
 
 void
-sio_canvas_init (sio_canvas_t *canvas, int width, int height)
+sio_canvas_init (sio_canvas_t *canvas, uint32_t width, uint32_t height)
 {
     canvas->width = MAX (1, width), canvas->height = MAX (1, height);
-    canvas->data = calloc (canvas->width * canvas->height, 1);
+    canvas->data = malloc (canvas->width * canvas->height);
+    sio_target (canvas), sio_clear (SIO_INVIS), sio_target (NULL);
 }
 
 void
@@ -171,9 +226,9 @@ sio_canvas_deinit (sio_canvas_t *canvas)
 }
 
 void
-sio_clear ()
+sio_clear (uint8_t c)
 {
-    memset (s.canvas->data, s.bg, s.canvas->width * s.canvas->height);
+    memset (s.canvas->data, c, s.canvas->width * s.canvas->height);
 }
 
 void
@@ -224,14 +279,21 @@ sio_blit (uint8_t *data, int x, int y, int w, int h, int sw, int sh)
 }
 
 void
+sio_row_raw (int x, int y, int w, uint8_t c)
+{
+    memset (&s.canvas->data[x + y * s.canvas->width], c & s.recolor, w);
+}
+
+void
 sio_rectf_raw (int x, int y, int w, int h, uint8_t c)
 {
     int i;
     int x0 = MAX (x, 0), x1 = MIN (x, 0);
     int y0 = MAX (y, 0), y1 = MIN (y, 0);
-    for (i = 0; i < MIN (h + y1, s.canvas->height - y); ++i)
-        memset (&s.canvas->data[x0 + (y0 + i) * s.canvas->width],
-                c & s.recolor, MIN (w + x1, s.canvas->width - x));
+    w = MIN (w + x1, s.canvas->width - x);
+    h = MIN (h + y1, s.canvas->height - y);
+    for (i = 0; i < h; ++i)
+        sio_row_raw (x0, y0 + i, w, c);
 }
 
 void
@@ -246,10 +308,10 @@ sio_rect (int x, int y, int w, int h, int t, uint8_t c)
 {
     if (x > -w && y > -h && x < s.canvas->width && y < s.canvas->height)
         {
-            sio_rectf_raw (x, y, w, t, c);
-            sio_rectf_raw (x, y + h - t, w, t, c);
-            sio_rectf_raw (x, y + t, t, h - 2 * t, c);
-            sio_rectf_raw (x + w - t, y + t, t, h - 2 * t, c);
+            sio_rectf (x, y, w, t, c);
+            sio_rectf (x, y + h - t, w, t, c);
+            sio_rectf (x, y + t, t, h - 2 * t, c);
+            sio_rectf (x + w - t, y + t, t, h - 2 * t, c);
         }
 }
 
@@ -268,7 +330,6 @@ sio_rect (int x, int y, int w, int h, int t, uint8_t c)
             if (e2 <= dx)                                                     \
                 e += dx, sy += ydir;                                          \
         }
-
 void
 sio_line (int sx, int sy, int ex, int ey, uint8_t c)
 {
