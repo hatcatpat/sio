@@ -1,5 +1,4 @@
 /* TODO: secure sio_blit(i) against negatives, use same logic as sio_rect */
-
 #define SIO_DEV
 
 #ifdef SIO_DEV
@@ -57,7 +56,7 @@ typedef struct
     sio_canvas_t screen, *canvas;
     uint8_t recolor;
     int mouse[2];
-    bool key[0xff], button[3], oldkey[0xff], oldbutton[3];
+    bool key[0xff], mods[3], button[3], oldkey[0xff], oldbutton[3];
     void (*mousemove) (int x, int y);
     void (*keyup) (char key);
     void (*keydown) (char key);
@@ -490,6 +489,7 @@ emu_loop ()
 {
     static SDL_Event e;
     static uint8_t c;
+    static uint16_t mods;
     static uint_t end, oldend = 0;
     static float elapsed, delay = 16.666f;
 
@@ -501,12 +501,20 @@ emu_loop ()
                     s.go = false;
                     return;
                 case SDL_KEYDOWN:
+                    mods = SDL_GetModState ();
+                    s.mods[0] = (mods & (KMOD_LSHIFT | KMOD_RSHIFT)) != 0;
+                    s.mods[1] = (mods & (KMOD_LCTRL | KMOD_RCTRL)) != 0;
+                    s.mods[2] = (mods & (KMOD_LALT | KMOD_RALT)) != 0;
                     c = e.key.keysym.sym;
                     if (s.keydown != NULL)
                         s.keydown (c);
                     s.key[c] = true;
                     break;
                 case SDL_KEYUP:
+                    mods = SDL_GetModState ();
+                    s.mods[0] = (mods & (KMOD_LSHIFT | KMOD_RSHIFT)) != 0;
+                    s.mods[1] = (mods & (KMOD_LCTRL | KMOD_RCTRL)) != 0;
+                    s.mods[2] = (mods & (KMOD_LALT | KMOD_RALT)) != 0;
                     c = e.key.keysym.sym;
                     if (s.keyup != NULL)
                         s.keyup (c);

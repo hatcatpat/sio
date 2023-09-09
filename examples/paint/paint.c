@@ -109,7 +109,9 @@ main (int argc, char *argv[])
     sio_canvas_init (&canvas, s.screen.width, s.screen.height);
     sio_canvas_init (&oldcanvas, s.screen.width, s.screen.height);
 
-    sio_canvas_load (&oldcanvas, "saved.sio");
+    sio_target (&oldcanvas);
+    sio_clear (bg);
+    sio_target (NULL);
 
     while (s.go)
         {
@@ -119,7 +121,7 @@ main (int argc, char *argv[])
             if (s.key['a'])
                 r = MAX (1, r - 1);
             else if (s.key['d'])
-                r = MIN (128, r + 1);
+                r = MIN (128, r + (s.mods[2] ? 10 : 1));
 
             if (sio_pressed ('1'))
                 fg = SIO_RED;
@@ -127,6 +129,11 @@ main (int argc, char *argv[])
                 fg = SIO_BLUE;
             else if (sio_pressed ('3'))
                 fg = SIO_GREEN;
+
+            if (sio_pressed ('l'))
+                sio_canvas_load (&oldcanvas, "saved.sio");
+            else if (sio_pressed ('s'))
+                sio_canvas_save (&oldcanvas, "saved.sio");
 
             if (sio_pressed ('z'))
                 circle = false;
@@ -207,8 +214,6 @@ main (int argc, char *argv[])
 
             sio_loop ();
         }
-
-    sio_canvas_save (&oldcanvas, "saved.sio");
 
     sio_canvas_deinit (&oldcanvas);
     sio_canvas_deinit (&canvas);
